@@ -10,11 +10,15 @@ export const useSignUp = () => {
     email: string;
     password: string;
   }) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: undefined, // Disable email confirmation
+      },
     });
     if (error) throw error;
+    return data;
   };
 
   const verifyOtp = async ({

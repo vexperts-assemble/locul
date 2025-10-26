@@ -33,6 +33,12 @@ yarn-error.*
 
 # local env files
 .env
+.env.*
+*.env
+mux-access-token*.env
+
+# sensitive config files
+supabase.config.js
 
 # typescript
 *.tsbuildinfo

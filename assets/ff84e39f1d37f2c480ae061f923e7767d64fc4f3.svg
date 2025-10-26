@@ -1,0 +1,8 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Video">
+<g id="Icon">
+<path d="M26.8333 8.16667L18.6667 14L26.8333 19.8333V8.16667Z" stroke="var(--stroke-0, white)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16.3333 5.83333H3.5C2.21134 5.83333 1.16667 6.878 1.16667 8.16667V19.8333C1.16667 21.122 2.21134 22.1667 3.5 22.1667H16.3333C17.622 22.1667 18.6667 21.122 18.6667 19.8333V8.16667C18.6667 6.878 17.622 5.83333 16.3333 5.83333Z" stroke="var(--stroke-0, white)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</g>
+</svg>

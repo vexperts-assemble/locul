@@ -5,14 +5,15 @@ import { createClient, processLock } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { SupabaseContext } from "@/context/supabase-context";
+import { supabaseConfig } from "@/supabase.config";
 
 interface SupabaseProviderProps {
   children: ReactNode;
 }
 
 export const SupabaseProvider = ({ children }: SupabaseProviderProps) => {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-  const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_KEY!;
+  const supabaseUrl = supabaseConfig.url;
+  const supabaseKey = supabaseConfig.key;
 
   const supabase = useMemo(
     () =>
