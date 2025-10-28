@@ -12,3 +12,6 @@ export const muxConfig = {
   webhookEndpoint: "/api/mux/webhook",
 };
 
+
+
+

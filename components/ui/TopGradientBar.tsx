@@ -3,12 +3,14 @@ import { View, Text, StyleSheet, ViewStyle, TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, fonts } from "../../theme/tokens";
+import Logo from "../Logo";
 
 interface TopGradientBarProps {
   leftBadgeValue?: string | number;
   rightBadgeValue?: string | number;
   showBadges?: boolean;
   logoText?: string;
+  useLogo?: boolean; // Use SVG Logo component instead of text
   paddingHorizontal?: number; // defaults to 30
   paddingVertical?: number; // defaults to 31
   gradientHeight?: number; // defaults to 15
@@ -21,6 +23,7 @@ export const TopGradientBar: React.FC<TopGradientBarProps> = ({
   rightBadgeValue = "39",
   showBadges = false,
   logoText = "locul",
+  useLogo = true,
   paddingHorizontal = 30,
   paddingVertical = 31,
   gradientHeight = 15,
@@ -62,7 +65,13 @@ export const TopGradientBar: React.FC<TopGradientBarProps> = ({
           <View style={{ width: 32 }} />
         )}
 
-        <Text style={[styles.logoText, logoStyle]}>{logoText}</Text>
+        {useLogo && logoText !== undefined ? (
+          <Logo width={100} height={37} color={colors.brand.primary} />
+        ) : logoText ? (
+          <Text style={[styles.logoText, logoStyle]}>{logoText}</Text>
+        ) : (
+          <View />
+        )}
 
         {showBadges ? (
           <View style={styles.badge}>

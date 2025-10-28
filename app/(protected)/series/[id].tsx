@@ -8,23 +8,60 @@ import {
   ScrollView,
   StatusBar,
   Dimensions,
+  Alert,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { useEpisodes, Episode } from "../../../hooks/useEpisodes";
+import { useWallet } from "../../../hooks/useWallet";
 import ImageDisplay from "../../../components/ImageDisplay";
-import TopGradientBar from "../../../components/ui/TopGradientBar";
 import HeroOverlay from "../../../components/ui/HeroOverlay";
 import { CustomBottomNav } from "../../../components/CustomBottomNav";
 import { LoadingState } from "../../../components/LoadingState";
+import { sessionStorage } from "../../../utils/sessionStorage";
+
+const PRICE_CENTS = 4999; // R49.99
+
+interface DemonstrativeEpisode {
+  id: string;
+  title: string;
+  isDemonstrative: true;
+  episodeNumber: number;
+  status?: string;
+  synopsis?: string;
+}
 
 export default function SeriesDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getSeriesById } = useEpisodes();
+  const { getWallet, isSeriesUnlocked, purchaseSeriesUnlock } = useWallet();
   const [loading, setLoading] = useState(true);
   const [series, setSeries] = useState<any | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [unlocked, setUnlocked] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  
+  // DEMO MODE: Hardcode locked state and sufficient balance for demonstration
+  // Set DEMO_MODE to false to use real database values
+  // Change demoUnlocked to true/false to demonstrate locked/unlocked states
+  // NOTE: Episodes 1-2 are always free, episodes 3-10 require unlock
+  const DEMO_MODE = true; // Using demo mode
+  const demoUnlocked = false; // Set to true to demo unlocked state (episodes 3-10)
+  const DEMO_INITIAL_BALANCE = 140053; // R1400.53 for demo
   const insets = useSafeAreaInsets();
   const { width } = Dimensions.get("window");
+
+  // Initialize demo wallet balance in session storage on mount
+  useEffect(() => {
+    if (DEMO_MODE) {
+      const existingBalance = sessionStorage.getItem('demoWalletBalance');
+      if (existingBalance === null) {
+        sessionStorage.setItem('demoWalletBalance', DEMO_INITIAL_BALANCE.toString());
+        console.log("[SeriesDetail] Initialized demo wallet:", DEMO_INITIAL_BALANCE);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -34,22 +71,164 @@ export default function SeriesDetailScreen() {
         const s = await getSeriesById(String(id));
         console.log("[SeriesDetail] fetched", !!s, s?.episodes?.length);
         setSeries(s);
+        
+        // Fetch wallet balance and unlock status
+        if (DEMO_MODE) {
+          // Get session balance or use initial demo balance
+          const sessionBalance = sessionStorage.getItem('demoWalletBalance');
+          setWalletBalance(sessionBalance ? parseInt(sessionBalance) : DEMO_INITIAL_BALANCE);
+          setUnlocked(demoUnlocked);
+        } else {
+          const w = await getWallet();
+          setWalletBalance(w?.balance_cents ?? null);
+          const u = await isSeriesUnlocked(String(id));
+          setUnlocked(u);
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, [id, getSeriesById]);
+  }, [id, getSeriesById, getWallet, isSeriesUnlocked]);
 
-  const orderedEpisodes: Episode[] = useMemo(() => {
-    if (!series?.episodes) return [] as Episode[];
+  const orderedEpisodes: (Episode | DemonstrativeEpisode)[] = useMemo(() => {
+    if (!series?.episodes) return [] as (Episode | DemonstrativeEpisode)[];
     const list: Episode[] = [...series.episodes];
     // Derive episode order purely by created_at ascending
     list.sort(
       (a, b) =>
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
-    return list;
+    
+    // Pad with demonstrative episodes up to 10
+    const result: (Episode | DemonstrativeEpisode)[] = [...list];
+    const currentCount = list.length;
+    
+    if (currentCount < 10) {
+      for (let i = currentCount + 1; i <= 10; i++) {
+        result.push({
+          id: `demo-${i}`,
+          title: `Episode ${i}`,
+          isDemonstrative: true,
+          episodeNumber: i,
+        });
+      }
+    }
+    
+    return result;
   }, [series]);
+
+  const getEpisodeUnlockState = (index: number): boolean => {
+    // Episodes 1-2 are always unlocked (free) - even when series is locked
+    if (index < 2) return true;
+    // Episodes 3-10 require series unlock
+    // Note: They show as unlocked/playable but may not have video data yet
+    return unlocked;
+  };
+
+  const firstPlayableEpisode = useMemo(() => {
+    for (let index = 0; index < orderedEpisodes.length; index++) {
+      const item = orderedEpisodes[index];
+      const isUnlocked = getEpisodeUnlockState(index);
+      const isDemonstrative =
+        "isDemonstrative" in item && item.isDemonstrative === true;
+      const hasPlaybackId =
+        !isDemonstrative &&
+        "mux_playback_id" in item &&
+        !!item.mux_playback_id;
+      const isProcessing =
+        !isDemonstrative &&
+        (!hasPlaybackId || item.status !== "ready");
+      const isPlayable =
+        isUnlocked && !isDemonstrative && !isProcessing && hasPlaybackId;
+
+      if (isPlayable) {
+        return {
+          episode: item as Episode,
+          index,
+        };
+      }
+    }
+
+    return null;
+  }, [orderedEpisodes, unlocked]);
+
+  const handleHeroPlay = () => {
+    if (!series) return;
+
+    if (!firstPlayableEpisode) {
+      console.log("[SeriesDetail] No playable episodes available", {
+        seriesId: series.id,
+        orderedEpisodes: orderedEpisodes.length,
+      });
+      Alert.alert(
+        "Playback Unavailable",
+        "We couldn't find a playable episode yet. Please try again later.",
+      );
+      return;
+    }
+
+    console.log("[SeriesDetail] Hero play pressed", {
+      seriesId: series.id,
+      episodeId: firstPlayableEpisode.episode.id,
+      index: firstPlayableEpisode.index + 1,
+    });
+
+    router.push({
+      pathname: "/(protected)/series/[id]/episode/[episodeId]",
+      params: {
+        id: series.id,
+        episodeId: firstPlayableEpisode.episode.id,
+      },
+    });
+  };
+
+  const handleUnlockPurchase = async () => {
+    if (unlocked || isPurchasing || !id) return;
+    
+    // Show confirmation dialog
+    Alert.alert(
+      "Unlock All Episodes",
+      `This will deduct R${(PRICE_CENTS / 100).toFixed(2)} from your wallet.\n\nCurrent Balance: R${((walletBalance || 0) / 100).toFixed(2)}\nAfter Purchase: R${(((walletBalance || 0) - PRICE_CENTS) / 100).toFixed(2)}\n\nDo you want to continue?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Unlock",
+          style: "default",
+          onPress: async () => {
+            setIsPurchasing(true);
+            try {
+              if (DEMO_MODE) {
+                // Demo mode: just toggle state and reduce balance
+                await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call
+                const newBal = (walletBalance || 0) - PRICE_CENTS;
+                setWalletBalance(newBal);
+                // Save to session storage
+                sessionStorage.setItem('demoWalletBalance', newBal.toString());
+                setUnlocked(true);
+                console.log("[SeriesDetail] DEMO: Series unlocked successfully");
+              } else {
+                const res = await purchaseSeriesUnlock(String(id), PRICE_CENTS);
+                const newBal = res?.new_balance_cents ?? null;
+                if (newBal !== null) setWalletBalance(newBal);
+                setUnlocked(true);
+                console.log("[SeriesDetail] Series unlocked successfully");
+              }
+            } catch (e) {
+              console.error("[SeriesDetail] Purchase failed:", e);
+              Alert.alert("Purchase Failed", "Unable to unlock series. Please try again.");
+            } finally {
+              setIsPurchasing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const canAfford = walletBalance !== null && walletBalance >= PRICE_CENTS;
 
   if (loading) {
     return <LoadingState message="Loading series..." />;
@@ -86,14 +265,13 @@ export default function SeriesDetailScreen() {
           preset="cover"
           style={styles.heroImage}
         />
-        <TopGradientBar showBadges={false} logoText="locul" />
         <HeroOverlay
           title={series.title}
           description={
             series.description || "Discover amazing stories and content."
           }
           onPressAdd={() => console.log("Add to watchlist")}
-          onPressPlay={() => console.log("Play series")}
+          onPressPlay={handleHeroPlay}
           showCTAStack
         />
       </View>
@@ -112,36 +290,109 @@ export default function SeriesDetailScreen() {
               data={orderedEpisodes}
               keyExtractor={(e) => e.id}
               scrollEnabled={false}
-              renderItem={({ item, index }) => (
-                <TouchableOpacity
-                  style={styles.episodeRow}
-                  disabled={item.status !== "ready"}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.episodeTitle} numberOfLines={1}>
-                      {`${index + 1}. `}
-                      {item.title}
-                    </Text>
-                    {!!item.synopsis && (
-                      <Text style={styles.episodeSynopsis} numberOfLines={2}>
-                        {item.synopsis}
-                      </Text>
-                    )}
-                  </View>
-                  <Text
+              renderItem={({ item, index }) => {
+                const isUnlocked = getEpisodeUnlockState(index);
+                const isDemonstrative = 'isDemonstrative' in item && item.isDemonstrative;
+                const hasPlaybackId = !isDemonstrative && 'mux_playback_id' in item && !!item.mux_playback_id;
+                const isProcessing = !isDemonstrative && (!hasPlaybackId || item.status !== "ready");
+                
+                // Episodes 1-2: Always show playable (even if locked series has no video yet)
+                // Episodes 3+: Show as unlocked/playable if series is unlocked, even without video data
+                // Only actually clickable if they have valid playback data
+                const canShowAsPlayable = isUnlocked; // Shows play icon if unlocked (regardless of video data)
+                const isPlayable = isUnlocked && !isDemonstrative && !isProcessing && hasPlaybackId; // Actually clickable
+                
+                const handleEpisodePress = () => {
+                  if (!isPlayable) {
+                    console.log("[SeriesDetail] Episode not playable:", {
+                      index: index + 1,
+                      isUnlocked,
+                      isDemonstrative,
+                      hasPlaybackId,
+                      isProcessing,
+                      status: item.status,
+                    });
+                    return;
+                  }
+                  
+                  console.log("[SeriesDetail] Navigating to episode:", {
+                    episodeId: item.id,
+                    title: item.title,
+                    hasPlaybackId,
+                  });
+                  
+                  // Navigate to episode player (ReelsScroller)
+                  router.push({
+                    pathname: "/(protected)/series/[id]/episode/[episodeId]",
+                    params: {
+                      id: series.id,
+                      episodeId: item.id,
+                    },
+                  });
+                };
+
+                return (
+                  <TouchableOpacity
                     style={[
-                      styles.status,
-                      item.status !== "ready"
-                        ? styles.statusProcessing
-                        : undefined,
+                      styles.episodeRow,
+                      !isPlayable && styles.episodeRowDisabled
                     ]}
+                    disabled={!isPlayable}
+                    onPress={handleEpisodePress}
+                    activeOpacity={0.7}
                   >
-                    {item.status === "ready" ? "Play" : "Processing"}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.episodeTitle} numberOfLines={1}>
+                        {`${index + 1}. `}
+                        {item.title}
+                      </Text>
+                      {!!item.synopsis && (
+                        <Text style={styles.episodeSynopsis} numberOfLines={2}>
+                          {item.synopsis}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.statusIcon}>
+                      {isProcessing ? (
+                        <Ionicons name="time-outline" size={24} color="#F5F5F5" />
+                      ) : canShowAsPlayable ? (
+                        <Ionicons name="play" size={24} color="#EB588C" />
+                      ) : (
+                        <Ionicons name="lock-closed" size={24} color="#E6C274" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
             />
           )}
+        </View>
+
+        {/* Unlock Button Section */}
+        <View style={styles.unlockSection}>
+          <TouchableOpacity
+            disabled={unlocked || !canAfford || isPurchasing}
+            onPress={handleUnlockPurchase}
+            style={[
+              styles.unlockButton,
+              unlocked ? styles.unlockButtonDisabled : undefined,
+              !canAfford && !unlocked ? styles.unlockButtonInsufficient : undefined,
+            ]}
+          >
+            <Ionicons
+              name="lock-open"
+              size={18}
+              color="white"
+              style={styles.unlockIconStyle}
+            />
+            <Text style={styles.unlockButtonText}>
+              {unlocked
+                ? "Unlocked"
+                : canAfford
+                  ? `Unlock All (R${(PRICE_CENTS / 100).toFixed(2)})`
+                  : "Insufficient funds"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -209,6 +460,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(245, 245, 245, 0.1)",
   },
+  episodeRowDisabled: {
+    opacity: 0.5,
+  },
   episodeTitle: {
     color: "#F5F5F5",
     fontSize: 16,
@@ -224,22 +478,43 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 18,
   },
-  status: {
-    color: "#EB588C",
-    fontWeight: "600",
-    fontFamily: "LeagueSpartan",
-    fontSize: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: "rgba(235, 88, 140, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(235, 88, 140, 0.3)",
+  statusIcon: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  statusProcessing: {
+  unlockSection: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  unlockButton: {
+    height: 48,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#EB588C",
+  },
+  unlockButtonDisabled: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  unlockButtonInsufficient: {
+    backgroundColor: "#5c3a42",
+  },
+  unlockButtonText: {
+    fontFamily: "LeagueSpartan",
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 20,
     color: "#F5F5F5",
-    backgroundColor: "rgba(245, 245, 245, 0.1)",
-    borderColor: "rgba(245, 245, 245, 0.2)",
-    opacity: 0.6,
+    textAlign: "center",
+  },
+  unlockIconStyle: {
+    marginRight: 4,
   },
 });

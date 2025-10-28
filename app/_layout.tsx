@@ -38,17 +38,15 @@ function RootNavigator() {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
           staysActiveInBackground: false,
-          interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
           playsInSilentModeIOS: true,
           shouldDuckAndroid: true,
-          interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
           playThroughEarpieceAndroid: false,
         });
         console.log(
-          "[Audio] Mode configured for speaker playback and hardware buttons",
+          "[Audio] Global audio mode configured successfully",
         );
       } catch (e) {
-        console.warn("[Audio] Failed to set mode", e);
+        console.warn("[Audio] Failed to set global audio mode", e);
       }
     })();
   }, []);
@@ -62,12 +60,12 @@ function RootNavigator() {
         animationDuration: 0,
       }}
     >
+      {/* Public routes - accessible regardless of auth state for demo */}
+      <Stack.Screen name="(public)" />
+
+      {/* Protected routes - require authentication */}
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="(protected)" />
-      </Stack.Protected>
-
-      <Stack.Protected guard={!session}>
-        <Stack.Screen name="(public)" />
       </Stack.Protected>
     </Stack>
   );

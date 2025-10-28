@@ -6,12 +6,10 @@ import React, {
   useState,
 } from "react";
 import { View, StyleSheet, StatusBar } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ReelsScroller } from "../../components/ReelsScroller";
 import { router } from "expo-router";
 import { useEpisodes, Episode } from "../../hooks/useEpisodes";
 import { useFocusEffect } from "@react-navigation/native";
-import TopGradientBar from "../../components/ui/TopGradientBar";
 import { CustomBottomNav } from "../../components/CustomBottomNav";
 import { LoadingState } from "../../components/LoadingState";
 
@@ -20,7 +18,6 @@ export default function ExploreScreen() {
   const [videos, setVideos] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const insets = useSafeAreaInsets();
   const [showBottomNav, setShowBottomNav] = useState(true);
 
   const loadReadyVideos = useCallback(async () => {
@@ -93,7 +90,6 @@ export default function ExploreScreen() {
         backgroundColor="transparent"
         translucent
       />
-      <TopGradientBar showBadges={false} logoText="locul" />
       <ReelsScroller data={reelsData} onScrollStateChange={setShowBottomNav} />
       <CustomBottomNav visible={showBottomNav} />
     </View>

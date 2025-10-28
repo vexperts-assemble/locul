@@ -376,15 +376,7 @@ export const useEpisodes = () => {
           .select(
             `
           *,
-          episodes:episodes(
-            id,
-            title,
-            synopsis,
-            duration_seconds,
-            status,
-            thumbnail_url,
-            created_at
-          )
+          episodes:episodes(*)
         `,
           )
           .eq("id", seriesId)

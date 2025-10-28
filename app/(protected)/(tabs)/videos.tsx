@@ -17,6 +17,7 @@ import { SeriesManagement } from "../../../components/SeriesManagement";
 import { VideoUpload as VideoUploadType } from "../../../hooks/useVideoUpload";
 import { colors, fonts, spacing, radii, shadows } from "../../../theme/tokens";
 import { CustomBottomNav } from "../../../components/CustomBottomNav";
+import Logo from "../../../components/Logo";
 
 export default function UploadScreen() {
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -45,7 +46,7 @@ export default function UploadScreen() {
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <Text style={styles.logoText}>locul</Text>
+        <Logo width={100} height={37} color={colors.brand.primary} />
         <TouchableOpacity style={styles.profileIcon}>
           <Ionicons
             name="settings-outline"

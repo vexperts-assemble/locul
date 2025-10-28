@@ -18,6 +18,7 @@ import { router } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { LoadingState } from "../../../components/LoadingState";
 import { ImageDisplay } from "../../../components/ImageDisplay";
+import { sessionStorage } from "../../../utils/sessionStorage";
 
 const { width } = Dimensions.get("window");
 
@@ -38,6 +39,16 @@ export default function ProfileScreen() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Initialize demo wallet balance in session storage on mount
+  useEffect(() => {
+    const DEMO_INITIAL_BALANCE = 140053; // R1400.53
+    const existingBalance = sessionStorage.getItem('demoWalletBalance');
+    if (existingBalance === null) {
+      sessionStorage.setItem('demoWalletBalance', DEMO_INITIAL_BALANCE.toString());
+      console.log("[Profile] Initialized demo wallet:", DEMO_INITIAL_BALANCE);
+    }
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -68,6 +79,23 @@ export default function ProfileScreen() {
     if (!supabase) return;
 
     try {
+      // Check for demo mode balance in session storage
+      const DEMO_INITIAL_BALANCE = 140053; // R1400.53
+      const demoBalance = sessionStorage.getItem('demoWalletBalance');
+      if (demoBalance !== null) {
+        // Use demo balance from session
+        setWallet({
+          id: 'demo',
+          user_id: 'demo',
+          balance_cents: parseInt(demoBalance),
+          currency: 'ZAR',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        console.log("[Profile] Using demo wallet balance:", parseInt(demoBalance));
+        return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();

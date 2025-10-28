@@ -11,11 +11,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEpisodes } from "../../../hooks/useEpisodes";
 import { useWatchlist } from "../../../hooks/useWatchlist";
-import { useMediaCache } from "../../../hooks/useMediaCache";
 import { ImageDisplay } from "../../../components/ImageDisplay";
 import { CustomBottomNav } from "../../../components/CustomBottomNav";
 import { LoadingState } from "../../../components/LoadingState";
@@ -41,7 +40,6 @@ export default function HomePage() {
   const insets = useSafeAreaInsets();
   const { getSeries, getEpisodes } = useEpisodes();
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
-  const mediaCache = useMediaCache();
 
   const [featuredSeries, setFeaturedSeries] = useState<SeriesData[]>([]);
   const [heroSeries, setHeroSeries] = useState<HeroVideoData | null>(null);
@@ -49,13 +47,16 @@ export default function HomePage() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [showThumbnail, setShowThumbnail] = useState(true);
   const [heroVideoUri, setHeroVideoUri] = useState<string | null>(null);
-  const [imageLoadFailed, setImageLoadFailed] = useState(false);
-  const [videoLoadAttempts, setVideoLoadAttempts] = useState(0);
   const videoRef = React.useRef<VideoDisplayHandle>(null);
-  const timerStartedRef = React.useRef<string | null>(null);
   const [videoProgress, setVideoProgress] = useState(0); // 0 to 1 (normalized progress)
   const [videoDuration, setVideoDuration] = useState(0); // milliseconds
   const [heroWatchlistStatus, setHeroWatchlistStatus] = useState(false);
+  
+  // Simple tracking of loaded media - no complex cache system
+  const loadedVideosRef = React.useRef<Set<string>>(new Set());
+  const currentHeroIdRef = React.useRef<string | null>(null);
+  const isInitializedRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
 
   const checkHeroWatchlistStatus = useCallback(async () => {
     if (heroSeries) {
@@ -114,38 +115,17 @@ export default function HomePage() {
       if (seriesWithPosters.length > 0) {
         const newHeroSeries =
           seriesWithPosters[heroIndex % seriesWithPosters.length];
-        console.log("[HomePage] Setting heroSeries:", {
-          id: newHeroSeries.id,
-          title: newHeroSeries.title,
-          heroIndex: heroIndex,
-        });
+        console.log("[HomePage] Initial hero:", newHeroSeries.title);
+        
         setHeroSeries(newHeroSeries as HeroVideoData);
         setFeaturedSeries(seriesWithPosters.slice(0, 8));
-        console.log(
-          "[HomePage] Featured series set:",
-          seriesWithPosters.slice(0, 8).length,
-          "items",
-        );
-        setImageLoadFailed(false);
-        setVideoLoadAttempts(0);
+        currentHeroIdRef.current = newHeroSeries.id;
 
-        // Load hero video immediately (independent of image)
-        console.log(
-          "[HomePage] Calling loadHeroVideo() for series:",
-          newHeroSeries.id,
-        );
+        // Load first hero video
         loadHeroVideo(newHeroSeries.id);
 
-        // Prefetch featured images for carousel
-        console.log("[HomePage] Prefetching featured images...");
-        seriesWithPosters.slice(0, 8).forEach((series) => {
-          if (series.poster_url) {
-            mediaCache.prefetchMedia(series.poster_url, "image");
-          }
-        });
-
-        // OPTIMIZATION: Dismiss loading state immediately after UI updates
-        console.log("[HomePage] Dismissing loading state");
+        // Done - images will load naturally as they're rendered
+        console.log("[HomePage] Initial load complete");
         setIsLoading(false);
       } else {
         console.warn("[HomePage] No series with posters found!");
@@ -157,63 +137,45 @@ export default function HomePage() {
     }
   };
 
-  const loadHeroVideo = useCallback(
-    async (seriesId: string) => {
-      try {
-        console.log("[HomePage] loadHeroVideo() called for series:", seriesId);
+  const loadHeroVideo = async (seriesId: string) => {
+    try {
+      console.log("[HomePage] Loading video for series:", seriesId);
 
-        // OPTIMIZATION: Only fetch episodes for this series, limit to 1
-        console.log("[HomePage] Calling getEpisodes(", seriesId, ", 1, 0)...");
-        const episodes = await getEpisodes(seriesId, 1, 0);
-        console.log(
-          "[HomePage] getEpisodes returned",
-          episodes.length,
-          "episode(s)",
-        );
+      // Fetch first episode
+      const episodes = await getEpisodes(seriesId, 1, 0);
+      const firstEpisode = episodes[0];
 
-        const firstEpisode = episodes[0];
-
-        if (firstEpisode) {
-          console.log("[HomePage] First episode found:", {
-            id: firstEpisode.id,
-            title: firstEpisode.title,
-            has_playback_id: !!firstEpisode.mux_playback_id,
-          });
-        } else {
-          console.warn("[HomePage] No episodes found for series:", seriesId);
+      if (firstEpisode?.mux_playback_id) {
+        const videoUri = `https://stream.mux.com/${firstEpisode.mux_playback_id}.m3u8`;
+        
+        // Simple check: if already loaded this exact URI, don't reload
+        if (loadedVideosRef.current.has(videoUri)) {
+          console.log("[HomePage] Video already loaded, reusing");
+          setHeroVideoUri(videoUri);
+          return;
         }
 
-        if (firstEpisode?.mux_playback_id) {
-          const videoUri = `https://stream.mux.com/${firstEpisode.mux_playback_id}.m3u8`;
-          console.log("[HomePage] Video URI:", videoUri);
-
-          // Check cache first
-          if (mediaCache.isCached(videoUri)) {
-            console.log(
-              "[HomePage] Video found in cache, using cached version",
-            );
-            setHeroVideoUri(videoUri);
-          } else {
-            // Mark as loading and set URI to start loading
-            console.log("[HomePage] Video not in cache, marking as loading");
-            mediaCache.setLoading(videoUri);
-            setHeroVideoUri(videoUri);
-            console.log("[HomePage] Starting video load:", videoUri);
-          }
-        } else {
-          console.warn("[HomePage] No mux_playback_id in first episode");
-        }
-      } catch (error) {
-        console.error("[HomePage] Error in loadHeroVideo:", error);
+        console.log("[HomePage] Loading new video:", videoUri);
+        setHeroVideoUri(videoUri);
+      } else {
+        console.warn("[HomePage] No playback ID for series:", seriesId);
+        setHeroVideoUri(null);
       }
-    },
-    [getEpisodes, mediaCache],
-  );
+    } catch (error) {
+      console.error("[HomePage] Error loading video:", error);
+      setHeroVideoUri(null);
+    }
+  };
 
   useEffect(() => {
-    console.log(
-      "[HomePage] useEffect: Initial load - calling loadSeriesData()",
-    );
+    // Guard against multiple initializations
+    if (isInitializedRef.current) {
+      console.log("[HomePage] Already initialized, skipping");
+      return;
+    }
+    
+    isInitializedRef.current = true;
+    console.log("[HomePage] Initializing - calling loadSeriesData()");
     loadSeriesData();
   }, []);
 
@@ -228,44 +190,23 @@ export default function HomePage() {
     }
   }, [heroSeries, checkHeroWatchlistStatus]);
 
-  // Show thumbnail for 3 seconds, then play video
-  // Only trigger once per new video URI
+  // Show thumbnail for 3 seconds, then hide to reveal video
   useEffect(() => {
-    console.log(
-      "[HomePage] useEffect: Thumbnail timer - heroSeries:",
-      heroSeries?.title,
-      "showThumbnail:",
-      showThumbnail,
-      "heroVideoUri:",
-      heroVideoUri ? "SET" : "NOT SET",
-    );
-    if (!heroSeries || !showThumbnail || !heroVideoUri) return;
+    if (!heroSeries || !showThumbnail) return;
 
-    // Only start timer if this is a new video URI
-    if (timerStartedRef.current === heroVideoUri) {
-      console.log(
-        "[HomePage] useEffect: Timer already started for this video URI",
-      );
-      return;
-    }
-    timerStartedRef.current = heroVideoUri;
-    console.log("[HomePage] useEffect: Starting 3-second thumbnail timer");
-
+    console.log("[HomePage] Starting thumbnail timer for:", heroSeries.title);
+    
     const thumbnailTimer = setTimeout(() => {
-      console.log(
-        "[HomePage] useEffect: Thumbnail timer complete, hiding thumbnail",
-      );
+      console.log("[HomePage] Thumbnail timer complete, showing video");
       setShowThumbnail(false);
     }, 3000);
 
     return () => clearTimeout(thumbnailTimer);
-  }, [showThumbnail, heroVideoUri]);
+  }, [heroSeries, showThumbnail]);
 
   const handleVideoEnd = () => {
     // Move to next series
     setHeroIndex((prev) => prev + 1);
-    setShowThumbnail(true);
-    timerStartedRef.current = null; // Reset the timer started ref
   };
 
   const handleWatchNow = async () => {
@@ -313,76 +254,95 @@ export default function HomePage() {
 
   // Update hero when index changes
   useEffect(() => {
-    console.log(
-      "[HomePage] useEffect: Hero index changed to",
-      heroIndex,
-      "featured series count:",
-      featuredSeries.length,
-    );
-    if (featuredSeries.length > 0) {
-      timerStartedRef.current = null; // Reset timer ref when changing series
-      const newHeroSeries = featuredSeries[heroIndex % featuredSeries.length];
-      console.log(
-        "[HomePage] useEffect: Setting new hero series:",
-        newHeroSeries.title,
-      );
-      setHeroSeries(newHeroSeries as HeroVideoData);
-      setShowThumbnail(true);
-      setHeroVideoUri(null);
-      loadHeroVideo(newHeroSeries.id);
+    if (featuredSeries.length === 0) return;
+
+    const newHeroSeries = featuredSeries[heroIndex % featuredSeries.length];
+    
+    // Skip if same hero (prevents unnecessary reloads)
+    if (currentHeroIdRef.current === newHeroSeries.id) {
+      console.log("[HomePage] Hero already set, skipping");
+      return;
     }
-  }, [heroIndex, featuredSeries, loadHeroVideo]);
+
+    console.log("[HomePage] Hero changed to:", newHeroSeries.title);
+    currentHeroIdRef.current = newHeroSeries.id;
+    
+    // Reset state for new hero
+    setHeroSeries(newHeroSeries as HeroVideoData);
+    setShowThumbnail(true);
+    setHeroVideoUri(null); // Clear old video (triggers cleanup in VideoDisplay)
+    
+    // Load new hero video immediately
+    loadHeroVideo(newHeroSeries.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroIndex, featuredSeries]);
 
   // Cleanup: Stop video playback when component unmounts
   useEffect(() => {
+    isMountedRef.current = true;
+    
     return () => {
+      console.log("[HomePage] Component unmounting, cleaning up");
+      isMountedRef.current = false;
+      isInitializedRef.current = false;
       setHeroVideoUri(null);
       setShowThumbnail(true);
     };
   }, []);
 
-  const handleImageError = useCallback(() => {
-    console.warn("[HomePage] Hero image failed to load");
-    setImageLoadFailed(true);
-    // IMPORTANT: Do NOT set video URI to null
-    // Video should continue playing regardless of image load failure
-  }, []);
+  // Pause video when navigating away, resume when coming back
+  useFocusEffect(
+    React.useCallback(() => {
+      // Only handle focus after component is fully initialized
+      if (!isInitializedRef.current || !isMountedRef.current) {
+        console.log("[HomePage] Skipping focus effect - not initialized");
+        return;
+      }
+
+      console.log("[HomePage] Screen focused");
+      
+      // Resume video if it was playing
+      if (videoRef.current && heroVideoUri && !showThumbnail) {
+        videoRef.current.play().catch(() => {
+          // Ignore play errors
+        });
+      }
+
+      return () => {
+        console.log("[HomePage] Screen unfocused, pausing playback");
+        
+        // Pause video when leaving the screen
+        if (videoRef.current && isMountedRef.current) {
+          videoRef.current.pause().catch(() => {
+            // Ignore pause errors
+          });
+        }
+      };
+    }, [heroVideoUri, showThumbnail]),
+  );
 
   const handleImageLoad = useCallback(() => {
-    console.log("[HomePage] Hero image loaded successfully");
-    setImageLoadFailed(false);
-    if (heroSeries?.poster_url) {
-      mediaCache.setCached(heroSeries.poster_url, "image");
-    }
-  }, [heroSeries, mediaCache]);
+    console.log("[HomePage] Hero image loaded");
+  }, []);
+
+  const handleImageError = useCallback(() => {
+    console.warn("[HomePage] Hero image failed to load");
+  }, []);
 
   const handleVideoLoad = useCallback(() => {
     console.log("[HomePage] Hero video loaded successfully");
     if (heroVideoUri) {
-      mediaCache.setCached(heroVideoUri, "video");
-      setVideoLoadAttempts(0); // Reset attempts on success
+      // Mark this video as loaded - prevents unnecessary reloads
+      loadedVideosRef.current.add(heroVideoUri);
     }
-  }, [heroVideoUri, mediaCache]);
+  }, [heroVideoUri]);
 
   const handleVideoError = useCallback(() => {
     console.error("[HomePage] Hero video failed to load");
-    // Retry logic for videos (up to 2 retries)
-    if (videoLoadAttempts < 2) {
-      setVideoLoadAttempts((prev) => prev + 1);
-      // The VideoDisplay component handles retries internally
-      console.log("[HomePage] Video retry attempt", videoLoadAttempts + 1);
-    }
-  }, [videoLoadAttempts]);
+    // VideoDisplay component handles retries internally
+  }, []);
 
-  // Reduce render logging noise - only log during initial states
-  if (isLoading || !heroSeries) {
-    console.log(
-      "[HomePage] render - isLoading:",
-      isLoading,
-      "heroSeries:",
-      heroSeries?.title,
-    );
-  }
+  // Minimal logging to reduce performance impact
 
   if (isLoading) {
     return <LoadingState message="Loading content..." />;
@@ -480,9 +440,6 @@ export default function HomePage() {
                   end={{ x: 0, y: 1 }}
                   style={styles.topBarGradient}
                 />
-                <View style={styles.topBarContent}>
-                  <Text style={styles.logoText}>locul</Text>
-                </View>
               </View>
 
               {/* Title and Description - Positioned at Bottom */}
@@ -550,28 +507,13 @@ export default function HomePage() {
                           style={styles.featuredImage}
                         />
                         {isHighlighted && !showThumbnail && (
-                          <View style={styles.progressContainer}>
-                            <View style={styles.progressCircleTrack} />
+                          <View style={styles.progressBarContainer}>
+                            <View style={styles.progressBarTrack} />
                             <View
                               style={[
-                                styles.progressCircleProgress,
+                                styles.progressBarFill,
                                 {
-                                  borderLeftColor:
-                                    videoProgress >= 0
-                                      ? `rgba(229, 0, 89, ${Math.min(videoProgress * 4, 1)})`
-                                      : "transparent",
-                                  borderTopColor:
-                                    videoProgress >= 0.25
-                                      ? `rgba(229, 0, 89, ${Math.min((videoProgress - 0.25) * 4, 1)})`
-                                      : "transparent",
-                                  borderRightColor:
-                                    videoProgress >= 0.5
-                                      ? `rgba(229, 0, 89, ${Math.min((videoProgress - 0.5) * 4, 1)})`
-                                      : "transparent",
-                                  borderBottomColor:
-                                    videoProgress >= 0.75
-                                      ? `rgba(229, 0, 89, ${Math.min((videoProgress - 0.75) * 4, 1)})`
-                                      : "transparent",
+                                  width: `${Math.min(videoProgress * 100, 100)}%`,
                                 },
                               ]}
                             />
@@ -656,19 +598,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1,
-  },
-  topBarContent: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    width: "100%",
-    zIndex: 2,
-  },
-  logoText: {
-    fontSize: 32,
-    fontFamily: "LeagueSpartan",
-    fontWeight: "bold",
-    color: "#E50059",
   },
   heroContent: {
     position: "absolute",
@@ -771,29 +700,28 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: "hidden",
   },
-  progressContainer: {
+  progressBarContainer: {
     position: "absolute",
-    top: 12,
-    right: 12,
-    width: 22.4,
-    height: 22.4,
+    bottom: 8,
+    left: 8,
+    right: 8,
+    height: 3,
     zIndex: 10,
   },
-  progressCircleTrack: {
+  progressBarTrack: {
     position: "absolute",
-    width: 22.4,
-    height: 22.4,
-    borderRadius: 11.2,
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.4)",
+    width: "100%",
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    overflow: "hidden",
   },
-  progressCircleProgress: {
+  progressBarFill: {
     position: "absolute",
-    width: 22.4,
-    height: 22.4,
-    borderRadius: 11.2,
-    borderWidth: 2,
-    borderColor: "transparent",
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "rgba(229, 0, 89, 0.9)",
+    overflow: "hidden",
   },
   emptyContainer: {
     flex: 1,

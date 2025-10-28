@@ -1,43 +1,61 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   StatusBar,
   Image,
   Dimensions,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { SvgXml } from "react-native-svg";
+
+const rewindIcon = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M1.99902 6.49805L3.61824 11.498L8.99902 9.98763" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
+<path d="M12.9984 20.5V11.5511C13 11.5414 12.9984 11.5315 12.994 11.523C12.9896 11.5144 12.9826 11.5076 12.9741 11.5037C12.9656 11.4998 12.9561 11.4989 12.9472 11.5014C12.9382 11.5038 12.9302 11.5093 12.9246 11.517C12.9246 11.517 11.7332 13.3107 10.999 13.8405" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
+<path d="M19.0017 11.5H18.9964C17.341 11.5 15.999 12.7159 15.999 14.2157V17.7843C15.999 19.2841 17.341 20.5 18.9964 20.5H19.0017C20.6571 20.5 21.999 19.2841 21.999 17.7843V14.2157C21.999 12.7159 20.6571 11.5 19.0017 11.5Z" stroke="#E5E7EB" stroke-width="2"/>
+<path d="M3.56783 11.0345C4.76945 8.03856 7.01835 5.56495 9.90831 4.0605C12.7983 2.55604 16.1388 2.11994 19.3264 2.83097C22.514 3.54199 25.3386 5.35326 27.2899 7.93761C29.2413 10.522 30.1908 13.709 29.9668 16.923C29.7429 20.1371 28.3603 23.1662 26.0689 25.4633C23.7774 27.7605 20.7281 29.1741 17.4718 29.4488C14.2155 29.7236 10.9669 28.8414 8.31273 26.9616C5.65856 25.0818 3.77385 22.3284 2.99902 19.1986" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
+</svg>`;
+
+const forwardIcon = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12.9994 20.5V11.5511C13.001 11.5414 12.9994 11.5315 12.995 11.523C12.9906 11.5144 12.9836 11.5076 12.9751 11.5037C12.9666 11.4998 12.9571 11.4989 12.9481 11.5014C12.9392 11.5038 12.9312 11.5093 12.9255 11.517C12.9255 11.517 11.7342 13.3107 11 13.8405" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
+<path d="M19.0026 11.5H18.9974C17.342 11.5 16 12.7159 16 14.2157V17.7843C16 19.2841 17.342 20.5 18.9974 20.5H19.0026C20.658 20.5 22 19.2841 22 17.7843V14.2157C22 12.7159 20.658 11.5 19.0026 11.5Z" stroke="#E5E7EB" stroke-width="2"/>
+<path d="M29.999 6.49805L28.3798 11.498L22.999 9.98763" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
+<path d="M28.4302 11.0345C27.2286 8.03856 24.9797 5.56495 22.0897 4.0605C19.1998 2.55604 15.8593 2.11994 12.6717 2.83097C9.48405 3.54199 6.65946 5.35326 4.70811 7.93761C2.75676 10.522 1.8073 13.709 2.03123 16.923C2.25516 20.1371 3.63772 23.1662 5.92917 25.4633C8.22063 27.7605 11.2699 29.1741 14.5262 29.4488C17.7825 29.7236 21.0311 28.8414 23.6853 26.9616C26.3395 25.0818 28.2242 22.3284 28.999 19.1986" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
+</svg>`;
 
 const { width } = Dimensions.get("window");
 
-// Static featured items for display (no data wiring)
-const FEATURED_ITEMS = [
-  {
-    id: "1",
-    image: require("../../../assets/a8f5b0823315e214a77a21062ee3cc97ecb80118.png"),
-  },
-  {
-    id: "2",
-    image: require("../../../assets/ef52dfe92c6bfe99dcd2568b0d65aa8729c23e3f.png"),
-  },
-  {
-    id: "3",
-    image: require("../../../assets/e8bda3e3af22116533e5e4173709b018be2d4b18.png"),
-  },
-  {
-    id: "4",
-    image: require("../../../assets/e8bda3e3af22116533e5e4173709b018be2d4b18.png"),
-  },
-];
-
 export default function FeaturedShowcasePage() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0.47); // 47% progress
+  const [isBookmarked, setIsBookmarked] = useState(false);
+
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleRewind = () => {
+    // Rewind functionality
+    console.log("Rewind 10 seconds");
+  };
+
+  const handleBookmark = () => {
+    setIsBookmarked(!isBookmarked);
+  };
+
+  const handleEpisodes = () => {
+    // Navigate to episodes list
+    console.log("Navigate to episodes");
+  };
 
   return (
     <View style={styles.container}>
@@ -47,83 +65,93 @@ export default function FeaturedShowcasePage() {
         translucent
       />
 
-      {/* Black Background Container */}
-      <View style={styles.background}>
-        {/* Hero Section - Full Bleed Image with Overlays */}
-        <View style={styles.heroContainer}>
-          {/* Hero Background Image - scaled and zoomed */}
-          <Image
-            source={require("../../../assets/e8bda3e3af22116533e5e4173709b018be2d4b18.png")}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
+      {/* Hero Image/Video Section */}
+      <View style={styles.heroSection}>
+        <Image
+          source={require("../../../assets/e8bda3e3af22116533e5e4173709b018be2d4b18.png")}
+          style={styles.heroImage}
+          resizeMode="cover"
+        />
 
-          {/* Gradient Overlay - blends from black at bottom to transparent */}
-          <LinearGradient
-            colors={[
-              "rgba(0,0,0,0)",
-              "rgba(0,0,0,0.3)",
-              "rgba(0,0,0,0.85)",
-              "rgba(0,0,0,1)",
-            ]}
-            locations={[0, 0.5, 0.8, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.gradientOverlay}
-          />
+        {/* Gradient Overlay */}
+        <LinearGradient
+          colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)", "rgba(0,0,0,1)"]}
+          locations={[0, 0.5, 1]}
+          style={styles.gradientOverlay}
+        />
 
-          {/* Header - Top Bar */}
-          <View style={[styles.topBar, { paddingTop: insets.top + 16 }]}>
-            <View style={styles.topBarContent}>
-              <Text style={styles.logoText}>locul</Text>
-            </View>
+        {/* Back Button */}
+        <TouchableOpacity
+          style={[styles.backButton, { top: insets.top + 15 }]}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        {/* Right Side Action Buttons */}
+        <View style={styles.rightActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleBookmark}
+          >
+            <Ionicons
+              name={isBookmarked ? "checkmark" : "add"}
+              size={24}
+              color="#FFFFFF"
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.episodesButton} onPress={handleEpisodes}>
+            <Ionicons name="list" size={20} color="#FFFFFF" />
+            <Text style={styles.episodesText}>Episodes</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Episode Info and Controls */}
+        <View style={styles.controlsContainer}>
+          <View style={styles.episodeInfo}>
+            <Text style={styles.episodeTitle} numberOfLines={1}>
+              Episode 1: The Beginning
+            </Text>
+            <Text style={styles.episodeSubtitle} numberOfLines={1}>
+              A young man attempts to learn...
+            </Text>
           </View>
 
-          {/* Title and Description - Positioned at Bottom */}
-          <View style={styles.heroContent}>
-            <View style={styles.heroTextBlock}>
-              <Text style={styles.heroTitle}>Chronicles of Kwa-Zulu</Text>
-              <Text style={styles.heroDescription}>
-                A young man attempts to learn the culture and tradition of a
-                clan...
-              </Text>
-            </View>
+          {/* Playback Controls */}
+          <View style={styles.playbackControls}>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={handleRewind}
+            >
+              <SvgXml xml={rewindIcon} width={24} height={24} />
+            </TouchableOpacity>
 
-            {/* Stacked Buttons */}
-            <View style={styles.buttonStack}>
-              {/* Add Button */}
-              <TouchableOpacity style={styles.addButton}>
-                <Ionicons name="add" size={48} color="white" />
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.playPauseButton}
+              onPress={handlePlayPause}
+            >
+              <Ionicons
+                name={isPlaying ? "pause" : "play"}
+                size={32}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
 
-              {/* Play Button */}
-              <TouchableOpacity style={styles.playButton}>
-                <Ionicons name="play" size={20} color="white" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={handleRewind}
+            >
+              <SvgXml xml={forwardIcon} width={24} height={24} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Featured Section - Overlaps with hero */}
-        <View style={styles.featuredWrapper}>
-          <View style={styles.featuredTitleContainer}>
-            <Text style={styles.featuredTitle}>Featured</Text>
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.featuredCarousel}
-            scrollEventThrottle={16}
-          >
-            {FEATURED_ITEMS.map((item, index) => (
-              <View
-                key={item.id}
-                style={[styles.featuredCard, index === 0 && { marginLeft: 0 }]}
-              >
-                <Image source={item.image} style={styles.featuredImage} />
-              </View>
-            ))}
-          </ScrollView>
         </View>
       </View>
 
@@ -172,137 +200,117 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  background: {
+  heroSection: {
     flex: 1,
-    backgroundColor: "#000",
-  },
-  heroContainer: {
-    width: "100%",
-    height: 650,
     position: "relative",
-    overflow: "hidden",
   },
   heroImage: {
     width: "100%",
     height: "100%",
     resizeMode: "cover",
-    transform: [{ scale: 1.5 }],
   },
   gradientOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 400,
-  },
-  topBar: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
-    paddingTop: 0,
-    paddingBottom: 16,
-    zIndex: 10,
+    bottom: 0,
   },
-  topBarContent: {
-    flexDirection: "row",
+  backButton: {
+    position: "absolute",
+    left: 15,
+    width: 40,
+    height: 40,
     justifyContent: "center",
     alignItems: "center",
-    width: "100%",
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
-  logoText: {
-    fontSize: 32,
-    fontFamily: "LeagueSpartan",
-    fontWeight: "bold",
-    color: "#E50059",
-  },
-  heroContent: {
+  rightActions: {
     position: "absolute",
-    bottom: 60,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    right: 15,
+    bottom: 304,
+    alignItems: "flex-end",
+    gap: 24,
+  },
+  actionButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
-  heroTextBlock: {
-    flex: 1,
-    marginRight: 16,
-  },
-  heroTitle: {
-    color: "#FFFFFF",
-    fontSize: 24,
-    fontFamily: "LeagueSpartan",
-    fontWeight: "400",
-    marginBottom: 4,
-  },
-  heroDescription: {
-    color: "#B0B0B0",
-    fontSize: 17,
-    fontFamily: "LeagueSpartan",
-    fontWeight: "200",
-    lineHeight: 20,
-  },
-  buttonStack: {
-    flexDirection: "column",
+  episodesButton: {
     alignItems: "center",
     gap: 8,
-    marginTop: -16,
   },
-  addButton: {
-    width: 50,
-    height: 50,
-    justifyContent: "center",
-    alignItems: "center",
+  episodesText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: "LeagueSpartan",
+    fontWeight: "400",
   },
-  playButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#E50059",
-    justifyContent: "center",
-    alignItems: "center",
+  controlsContainer: {
+    position: "absolute",
+    bottom: 120,
+    left: 32,
+    right: 32,
+    width: width - 64,
   },
-  featuredWrapper: {
-    marginTop: -60,
-    flex: 1,
-    paddingTop: 20,
-    position: "relative",
+  episodeInfo: {
+    marginBottom: 16,
   },
-  featuredTitleContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  featuredTitle: {
+  episodeTitle: {
     color: "#FFFFFF",
     fontSize: 24,
     fontFamily: "LeagueSpartan",
     fontWeight: "600",
+    marginBottom: 4,
   },
-  featuredCarousel: {
-    paddingLeft: 20,
-    paddingRight: 60,
-    gap: 16,
+  episodeSubtitle: {
+    color: "#B0B0B0",
+    fontSize: 16,
+    fontFamily: "LeagueSpartan",
+    fontWeight: "400",
   },
-  featuredCard: {
-    width: width * 0.32,
-    aspectRatio: 3 / 4,
-    borderRadius: 8,
-    overflow: "hidden",
-    backgroundColor: "#b3b3b3",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.37,
-    shadowRadius: 20.5,
-    elevation: 10,
+  playbackControls: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 32,
   },
-  featuredImage: {
+  controlButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  playPauseButton: {
+    width: 56,
+    height: 56,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 28,
+    backgroundColor: "#E50059",
+  },
+  progressContainer: {
+    position: "absolute",
+    bottom: 100,
+    left: 0,
+    right: 0,
+    height: 8,
+  },
+  progressBar: {
     width: "100%",
+    height: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+  },
+  progressFill: {
     height: "100%",
-    resizeMode: "cover",
+    backgroundColor: "#E50059",
   },
   bottomNav: {
     flexDirection: "row",

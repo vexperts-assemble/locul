@@ -69,21 +69,20 @@ export const VideoDisplay = forwardRef<VideoDisplayHandle, VideoDisplayProps>(
     const [retryCount, setRetryCount] = useState(0);
     const [videoKey, setVideoKey] = useState(0);
     const [cacheBust, setCacheBust] = useState<string | null>(null);
+    const isCleaningUpRef = useRef(false);
 
-    // Ensure audio category allows speaker output and hardware buttons (iOS)
+    // Ensure audio category allows speaker output and hardware buttons
     React.useEffect(() => {
       (async () => {
         try {
           await Audio.setAudioModeAsync({
             allowsRecordingIOS: false,
             playsInSilentModeIOS: true,
-            interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
             staysActiveInBackground: false,
             shouldDuckAndroid: true,
-            interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
             playThroughEarpieceAndroid: false,
           });
-          console.log("[VideoDisplay] Audio mode set (component)");
+          console.log("[VideoDisplay] Audio mode set successfully");
         } catch (e) {
           console.warn("[VideoDisplay] Failed to set audio mode", e);
         }
@@ -117,11 +116,47 @@ export const VideoDisplay = forwardRef<VideoDisplayHandle, VideoDisplayProps>(
       );
     }, [sourceUri, preset, playbackId]);
 
-    // Reset retry state when the source changes
+    // Reset retry state and cleanup when the source changes
     React.useEffect(() => {
-      setRetryCount(0);
-      setCacheBust(null);
-      setVideoKey((k) => k + 1);
+      // Cleanup previous video instance before loading new one
+      const cleanup = async () => {
+        if (isCleaningUpRef.current) {
+          console.log("[VideoDisplay] Already cleaning up, skipping");
+          return;
+        }
+        
+        isCleaningUpRef.current = true;
+        
+        if (videoRef.current) {
+          try {
+            await videoRef.current.pauseAsync();
+            await videoRef.current.unloadAsync();
+            console.log("[VideoDisplay] Cleaned up previous video instance");
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        }
+        
+        isCleaningUpRef.current = false;
+      };
+
+      if (sourceUri) {
+        // Wait for cleanup to complete before loading new video
+        cleanup().then(() => {
+          if (!isCleaningUpRef.current) {
+            console.log("[VideoDisplay] Starting new video load");
+            setRetryCount(0);
+            setCacheBust(null);
+            setIsLoading(true);
+            setVideoKey((k) => k + 1);
+          }
+        });
+      }
+
+      // Cleanup on unmount
+      return () => {
+        cleanup();
+      };
     }, [sourceUri]);
 
     const computeResizeMode = (): ResizeMode => {
@@ -173,20 +208,36 @@ export const VideoDisplay = forwardRef<VideoDisplayHandle, VideoDisplayProps>(
       setIsLoading(false);
       console.error("[VideoDisplay] onError", e);
       onError?.(e);
-      // iOS sometimes throws transient CoreMedia errors (-12889). Try a bounded auto-retry with cache-busting.
+      
+      // iOS sometimes throws transient CoreMedia errors (-12889, -11800). 
+      // Retry with progressive backoff, cache-bust only on final retry
       if (retryCount < 2) {
         (async () => {
           try {
+            await videoRef.current?.pauseAsync();
             await videoRef.current?.unloadAsync();
-          } catch {}
+            console.log("[VideoDisplay] Unloaded failed video instance");
+          } catch (cleanupErr) {
+            // Ignore cleanup errors
+          }
         })();
+        
+        // Progressive delay: 500ms, 1000ms
+        const delay = 500 * (retryCount + 1);
+        
         setTimeout(() => {
+          console.log("[VideoDisplay] Retrying load, attempt", retryCount + 1, "after", delay, "ms");
           setRetryCount((c) => c + 1);
-          setCacheBust(String(Date.now()));
+          // Only cache-bust on the final retry attempt
+          if (retryCount === 1) {
+            setCacheBust(String(Date.now()));
+            console.log("[VideoDisplay] Using cache-bust on final retry");
+          }
           setVideoKey((k) => k + 1);
           setIsLoading(true);
-          console.log("[VideoDisplay] retrying load, attempt", retryCount + 1);
-        }, 300);
+        }, delay);
+      } else {
+        console.error("[VideoDisplay] Max retries reached, giving up");
       }
     };
 
@@ -194,22 +245,20 @@ export const VideoDisplay = forwardRef<VideoDisplayHandle, VideoDisplayProps>(
       (status: AVPlaybackStatus) => {
         if (!status.isLoaded) return;
         const js: any = status as any;
-        if (__DEV__) {
-          // Log occasionally to avoid spamming
-          if (js.positionMillis % 5000 < 250) {
-            console.log("[VideoDisplay] status", {
-              isPlaying: js.isPlaying,
-              pos: js.positionMillis,
-              dur: js.durationMillis,
-              isMuted: js.isMuted,
-              vol: js.volume,
-            });
-          }
+        
+        // Reduced logging - only log every 10 seconds to minimize performance impact
+        if (__DEV__ && js.positionMillis % 10000 < 250) {
+          console.log("[VideoDisplay] playback", {
+            playing: js.isPlaying,
+            pos: Math.floor(js.positionMillis / 1000) + "s",
+            dur: Math.floor(js.durationMillis / 1000) + "s",
+          });
         }
+        
         onPlaybackChange?.(!!status.isPlaying);
         onStatus?.(status);
       },
-      [onPlaybackChange],
+      [onPlaybackChange, onStatus],
     );
 
     useImperativeHandle(

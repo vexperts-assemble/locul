@@ -16,35 +16,35 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     name: "home",
-    label: "Home",
+    label: "locul",
     icon: "home-outline",
     activeIcon: "home",
     route: "/(protected)/(tabs)",
   },
   {
     name: "explore",
-    label: "Explore",
+    label: "explore",
     icon: "play-circle-outline",
     activeIcon: "play-circle",
     route: "/(protected)/explore",
   },
   {
     name: "upload",
-    label: "Upload",
+    label: "upload",
     icon: "videocam-outline",
     activeIcon: "videocam",
     route: "/(protected)/(tabs)/videos",
   },
   {
     name: "featured",
-    label: "Featured",
+    label: "featured",
     icon: "star-outline",
     activeIcon: "star",
     route: "/(protected)/(tabs)/featured",
   },
   {
     name: "profile",
-    label: "Profile",
+    label: "profile",
     icon: "person-outline",
     activeIcon: "person",
     route: "/(protected)/(tabs)/profile",
@@ -75,29 +75,39 @@ export const CustomBottomNav: React.FC<CustomBottomNavProps> = ({
       const current = normalize(pathname);
       const target = normalize(route);
 
-      // Home tab: treat index route as active or root '/'
+      // Home tab: check for index, root, or empty paths
       if (target === "/(protected)/(tabs)") {
         return (
           current === "/(protected)/(tabs)" ||
           current === "/(protected)/(tabs)/index" ||
-          current === "/(protected)/(tabs)/" ||
           current === "/" ||
-          current === ""
+          current === "" ||
+          current === "/index"
         );
       }
 
-      // Featured tab: treat featured route as active
+      // For other tabs, check both the full path and the simplified path
+      // Expo Router's usePathname() may return simplified paths like "/profile" instead of "/(protected)/(tabs)/profile"
+      
+      // Featured tab
       if (target === "/(protected)/(tabs)/featured") {
-        return current === "/(protected)/(tabs)/featured";
+        return current === "/(protected)/(tabs)/featured" || current === "/featured";
       }
 
-      // Explore tab: exact match
+      // Upload/Videos tab
+      if (target === "/(protected)/(tabs)/videos") {
+        return current === "/(protected)/(tabs)/videos" || current === "/videos";
+      }
+
+      // Profile tab
+      if (target === "/(protected)/(tabs)/profile") {
+        return current === "/(protected)/(tabs)/profile" || current === "/profile";
+      }
+
+      // Explore tab (nav is hidden on this page anyway)
       if (target === "/(protected)/explore") {
-        return current === "/(protected)/explore";
+        return current === "/(protected)/explore" || current === "/explore";
       }
-
-      // For other tabs, check if current path matches exactly
-      if (current === target) return true;
 
       return false;
     },
@@ -113,23 +123,27 @@ export const CustomBottomNav: React.FC<CustomBottomNavProps> = ({
         {navItems.map((item) => {
           const active = isActive(item.route);
           return (
-            <TouchableOpacity
-              key={item.name}
-              style={[styles.navItem, active && styles.navItemActive]}
-              onPress={
-                active ? undefined : () => router.push(item.route as any)
-              }
-              disabled={active}
-            >
-              <Ionicons
-                name={active ? item.activeIcon : item.icon}
-                size={24}
-                color={active ? "#E50059" : "#F3F4F6"}
-              />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
+            <View key={item.name} style={styles.navItemWrapper}>
+              {active && <View style={styles.glowEffect} />}
+              <TouchableOpacity
+                style={[styles.navItem, active && styles.navItemActive]}
+                onPress={
+                  active ? undefined : () => router.push(item.route as any)
+                }
+                disabled={active}
+              >
+                <Ionicons
+                  name={active ? item.activeIcon : item.icon}
+                  size={24}
+                  color={active ? "#FFFFFF" : "#E5E7EB"}
+                />
+                {active && (
+                  <Text style={[styles.navLabel, active && styles.navLabelActive]}>
+                    {item.label}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
           );
         })}
       </View>
@@ -152,28 +166,64 @@ const styles = StyleSheet.create({
   navItems: {
     flex: 1,
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "center",
     alignItems: "center",
+    gap: 8,
   },
-  // Individual navigation item
+  // Wrapper for each nav item to contain the glow effect
+  navItemWrapper: {
+    position: "relative",
+  },
+  // Soft pink glow effect behind active tab
+  glowEffect: {
+    position: "absolute",
+    top: -20,
+    left: -25,
+    right: -25,
+    bottom: -20,
+    backgroundColor: "rgba(235, 88, 140, 0.10)",
+    borderRadius: 50,
+    zIndex: -1,
+  },
+  // Individual navigation item (inactive - just icon, circular)
   navItem: {
+    width: 48,
+    height: 48,
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    justifyContent: "center",
+    paddingVertical: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 27,
   },
-  // Active navigation item styling
+  // Active navigation item styling (horizontal pill shape with pink background)
   navItemActive: {
-    opacity: 1,
+    flexDirection: "row",
+    backgroundColor: "rgba(61.26, 0, 21.67, 0.49)",
+    borderRadius: 43,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    width: "auto",
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    shadowColor: "rgba(235, 88, 140, 0.20)",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 14.55,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(229, 231, 235, 0.07)",
   },
-  // Navigation labels
+  // Active label styling
   navLabel: {
-    fontSize: 12,
+    color: "#FFFFFF",
+    fontSize: 20,
     fontFamily: "LeagueSpartan",
-    fontWeight: "400",
-    color: "#F3F4F6", // Light gray instead of inactive gray
+    fontWeight: "700",
+    lineHeight: 20,
   },
   navLabelActive: {
-    color: "#E50059",
+    color: "#FFFFFF",
   },
 });

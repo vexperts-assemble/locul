@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -92,18 +93,37 @@ export const EpisodesBottomSheet: React.FC<EpisodesBottomSheetProps> = ({
 
   const handlePurchase = async () => {
     if (unlocked || isBuying) return;
-    setIsBuying(true);
-    try {
-      const res = await purchaseSeriesUnlock(seriesId, priceCents);
-      const newBal = res?.new_balance_cents ?? null;
-      if (newBal !== null) setWalletBalance(newBal);
-      setUnlocked(true);
-      onPurchased?.(newBal ?? 0);
-    } catch (e) {
-      console.error("[Purchase] Failed:", e);
-    } finally {
-      setIsBuying(false);
-    }
+    
+    // Show confirmation dialog
+    Alert.alert(
+      "Unlock All Episodes",
+      `This will deduct R${(priceCents / 100).toFixed(2)} from your wallet.\n\nCurrent Balance: R${((walletBalance || 0) / 100).toFixed(2)}\nAfter Purchase: R${(((walletBalance || 0) - priceCents) / 100).toFixed(2)}\n\nDo you want to continue?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Unlock",
+          style: "default",
+          onPress: async () => {
+            setIsBuying(true);
+            try {
+              const res = await purchaseSeriesUnlock(seriesId, priceCents);
+              const newBal = res?.new_balance_cents ?? null;
+              if (newBal !== null) setWalletBalance(newBal);
+              setUnlocked(true);
+              onPurchased?.(newBal ?? 0);
+            } catch (e) {
+              console.error("[Purchase] Failed:", e);
+              Alert.alert("Purchase Failed", "Unable to unlock series. Please try again.");
+            } finally {
+              setIsBuying(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (

@@ -2,7 +2,14 @@ import { Stack } from "expo-router";
 
 export default function PublicLayout() {
   return (
-    <Stack initialRouteName="welcome">
+    <Stack initialRouteName="invite-code">
+      <Stack.Screen
+        name="invite-code"
+        options={{
+          title: "Invite Code",
+          headerShown: false,
+        }}
+      />
       <Stack.Screen
         name="welcome"
         options={{
