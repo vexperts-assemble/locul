@@ -9,7 +9,6 @@ import {
   Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSupabase } from "../../../hooks/useSupabase";
 import { useWatchlist, WatchlistItem } from "../../../hooks/useWatchlist";
@@ -33,7 +32,7 @@ interface Wallet {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { supabase } = useSupabase();
+  const { supabase, signOut } = useSupabase();
   const { getWatchlist } = useWatchlist();
   const { getEpisodes } = useEpisodes();
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -129,6 +128,17 @@ export default function ProfileScreen() {
     });
   };
 
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // Clear demo wallet balance on logout
+      sessionStorage.removeItem('demoWalletBalance');
+      router.replace("/invite-code");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
+
   if (loading) {
     return <LoadingState message="Loading your profile..." />;
   }
@@ -152,10 +162,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 }]}
-      >
+      <View style={styles.content}>
         {/* Wallet Section */}
         <View style={styles.section}>
           <Text style={styles.walletLabel}>My Wallet</Text>
@@ -208,11 +215,18 @@ export default function ProfileScreen() {
             <Text style={styles.menuText}>Settings & Notifications</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.menuItem, styles.menuItemBottom]}>
+          <TouchableOpacity style={styles.menuItem}>
             <Text style={styles.menuText}>Payment Methods & History</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.menuItem, styles.menuItemBottom]}
+            onPress={handleLogout}
+          >
+            <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -247,14 +261,13 @@ const styles = StyleSheet.create({
     width: 115,
     height: 50,
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
     paddingHorizontal: 20,
+    paddingBottom: 110,
   },
   section: {
-    marginBottom: 40,
+    marginBottom: 24,
   },
   walletLabel: {
     fontSize: 16,
@@ -320,7 +333,7 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   menuSection: {
-    marginBottom: 40,
+    marginTop: 8,
   },
   menuItem: {
     paddingVertical: 16,
@@ -341,5 +354,9 @@ const styles = StyleSheet.create({
     fontFamily: "LeagueSpartan",
     fontWeight: "300",
     color: "#F5F5F5",
+  },
+  logoutText: {
+    color: "#EB588C",
+    fontWeight: "600",
   },
 });

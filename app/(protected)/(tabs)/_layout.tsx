@@ -27,6 +27,12 @@ export default function TabsLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="profile"
+        options={{
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

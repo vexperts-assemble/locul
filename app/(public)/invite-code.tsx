@@ -24,7 +24,7 @@ export default function InviteCodePage() {
   const [code, setCode] = useState(["", "", "", "", ""]);
   const [error, setError] = useState(false);
   const inputRefs = useRef<Array<TextInput | null>>([]);
-  const { session } = useSupabase();
+  const { session, supabase } = useSupabase();
 
   const handleCodeChange = (text: string, index: number) => {
     const newCode = [...code];
@@ -45,7 +45,7 @@ export default function InviteCodePage() {
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const enteredCode = code.join("");
     
     if (enteredCode === CORRECT_INVITE_CODE) {
@@ -54,8 +54,25 @@ export default function InviteCodePage() {
         // User is authenticated, go to home
         router.replace("/(protected)/(tabs)");
       } else {
-        // User needs to sign up/in
-        router.replace("/sign-up");
+        // Auto-authenticate as demo user for seamless demo experience
+        try {
+          const { error } = await supabase.auth.signInWithPassword({
+            email: 'demo@locul.com',
+            password: 'LoculDemo2024!' // Demo password - change for production
+          });
+          
+          if (error) {
+            console.error('Demo login error:', error);
+            // If demo login fails, redirect to sign-up as fallback
+            router.replace("/sign-up");
+          }
+          // Session will be set automatically via auth state listener
+          // which will redirect to protected routes
+        } catch (err) {
+          console.error('Demo login failed:', err);
+          // Fallback to sign-up if there's an error
+          router.replace("/sign-up");
+        }
       }
     } else {
       setError(true);
